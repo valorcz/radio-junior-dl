@@ -7,7 +7,7 @@
 # Just pass an Radio Junior URL
 URL="{$1}"
 GOEXECDIR="$(go env GOPATH)"
-PATH=$PATH:$GOEXECDIR/bin
+PATH="${PATH}":"${GOEXECDIR}"/bin
 
 # This ugly thing will turn the HTML page into an array of URLs & episode names
 content=$( curl -s "${URL}" )
