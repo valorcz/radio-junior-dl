@@ -12,6 +12,8 @@ content=$( curl -s "${URL}" )
 items=$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .children[].children[].text }' 2>/dev/null )
 item=$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .text }' 2>/dev/null )
 
+description="$( echo "${content}" | pup --charset utf-8  'meta[name="description"]' json{} | jq -c '.[] | .content' )"
+
 # If items are empty, we may be downloading from a page with a single file
 if [ -z "${items}" ]; then
     items="${item}"
@@ -31,5 +33,6 @@ do
   name="$(echo """${line}""" | jq -r '.name' | tr ': .' '___')"
   echo "Downloading to ${name}.mp3"
   curl -# "${url}" -o "${name}.mp3"
+  id3tag -1 -2 --song="${name}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --comment="${URL}" "${name}.mp3"
 done < <(printf '%s\n' "${items}")
 
