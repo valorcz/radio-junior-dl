@@ -31,6 +31,10 @@ do
   url="$(echo """${line}"""| jq -r '.href')"
   # Neuter the name a bit, even though it could be better
   name="$(echo """${line}""" | jq -r '.name' | tr ': .' '___')"
+  #if the file exists and has a size greater than zero
+  if [ -s "${name}.mp3" ]; then
+    continue
+  fi
   echo "Downloading to ${name}.mp3"
   curl -# "${url}" -o "${name}.mp3"
   id3tag -1 -2 --song="${name}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --comment="${URL}" "${name}.mp3"
