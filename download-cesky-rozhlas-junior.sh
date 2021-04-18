@@ -5,14 +5,18 @@
 #   * jq
 #   * id3tag
 
-for APP in pup jq; do
+mandataoryApps=(pup jq)
+optionalApps=(id3tag)
+
+
+for APP in ${mandatoryApps[@]}; do
     if ( which $APP >/dev/null 2>&1 ); then
         echo "ERROR: Application $APP not found" >&2
         exit 1
     fi
 done
 
-for APP in id3tag; do
+for APP in ${optionalApps[@]}; do
     if ( which $APP >/dev/null 2>&1 ); then
         echo "WARNING: Application $APP not found, some features will not be provided" >&2
     fi
