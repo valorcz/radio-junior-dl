@@ -97,7 +97,7 @@ function doDownload() {
 }
 
 
-function mainLoop() {
+function main() {
     parseArgs "$@"
     verifyFunctions "true"  "${mandatoryApps[@]}"
     verifyFunctions "false" "${optionalApps[@]}"
@@ -109,4 +109,4 @@ function mainLoop() {
     doDownload
 }
 
-mainLoop "$@"
+main "$@"
