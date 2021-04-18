@@ -3,6 +3,14 @@
 # This script requires:
 #   * pup
 #   * jq
+#   * id3tag
+
+for APP in pup jq id3tag; do
+    if $( which $APP 2>&1 >/dev/null ); then
+        echo "Application $APP not found" >&2
+        exit 1
+    fi
+done
 
 # Just pass an Radio Junior URL
 URL="{$1}"
