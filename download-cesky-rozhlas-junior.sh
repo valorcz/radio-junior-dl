@@ -5,10 +5,16 @@
 #   * jq
 #   * id3tag
 
-for APP in pup jq id3tag; do
+for APP in pup jq; do
     if ( which $APP >/dev/null 2>&1 ); then
-        echo "Application $APP not found" >&2
+        echo "ERROR: Application $APP not found" >&2
         exit 1
+    fi
+done
+
+for APP in id3tag; do
+    if ( which $APP >/dev/null 2>&1 ); then
+        echo "WARNING: Application $APP not found, some features will not be provided" >&2
     fi
 done
 
