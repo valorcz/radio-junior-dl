@@ -5,7 +5,7 @@
 #   * jq
 #   * id3tag
 
-mandataoryApps=(pup jq)
+mandatoryApps=(pup jq)
 optionalApps=(id3tag)
 
 
