@@ -50,12 +50,7 @@ function parseArgs() {
             -d|--debug|-v|--verb) DEBUG=true ; shift;;
             -c|--chars) ESCAPECHARS="$2"; shift 2;;
             #--interactive|-i) INTERACTIVE=true; shift ;;
-            *)  if [ $# -gt 1 ]; then
-                    echo "$0: error - unrecognized option $1. Use -h for help." >&2;
-                    exit 1
-                else
-                    URL="$1"
-                fi 
+            *)  URLs="$URLs $1"
                 shift
                 ;;
         esac
@@ -105,11 +100,12 @@ function main() {
     verifyFunctions "true"  "${mandatoryApps[@]}"
     verifyFunctions "false" "${optionalApps[@]}"
     
-    items=''
-    description=''
-    fillValues
-
-    doDownload
+    for URL in $URLs; do
+        items=''
+        description=''
+        fillValues
+        doDownload
+    done
 }
 
 main "$@"
