@@ -86,7 +86,7 @@ function doDownload() {
     do
         url="$(echo """${line}"""| jq -r '.href')"
         # Neuter the name a bit, even though it could be better
-        name="$(echo """${line}""" | jq -r '.name' | tr "$ESCAPECHARS" '_' | sed -e's/[_][_]*/_/g' -e's/^_//g' )"
+        name="$(echo """${line}""" | jq -r '.name' | tr -s "$ESCAPECHARS" '_' | sed -e's/^_//g' )"
         clearName="$(echo """${line}""" | jq -r '.name' )"
         #if the file exists and has a size greater than zero
         if [ -s "${name}.mp3" ]; then
