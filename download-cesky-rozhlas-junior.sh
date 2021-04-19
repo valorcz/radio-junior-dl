@@ -21,6 +21,29 @@ DEBUG=false
 #INTERACTIVE=false
 ESCAPECHARS="!?. ;:"
 
+function printHelp() {
+    echo -n "Awesome super duper overengineered script to download stuff from Cesky Rozhlas Junor
+Usage:  $(basename "$0") [OPTs] URLs
+
+    URL -- URLs (space separated) of radio streams to be downloaded
+           no param prior this is needed, it's NOT positional
+
+    -h|--help             -- prints this help
+    -c|--chars \"$CHARS\" -- replace these chars in filename by \"_\"
+                             mp3 tag is not affected
+    --debug               -- enables debug output
+
+Needs to have installed:
+    * jq 
+    * pup ( https://github.com/ericchiang/pup )
+Helps to have installed:
+    * id3tag
+
+"
+
+}
+
+
 function verifyFunctions() {
     local MANDATORY="$1"
     shift
@@ -88,9 +111,11 @@ function doDownload() {
             echo "${FileName} exists, skipping"
             continue
         fi
+        
         echo "Downloading to ${FileName}.mp3"
         curl -# "${url}" -o "${FileName}.mp3"
-        id3tag -1 -2 --song="${OrigName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --comment="${URL}" "${FileName}.mp3"
+         ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --comment="${URL}" "${FileName}.mp3"
+         
     done < <(printf '%s\n' "${items}")
 }
 
