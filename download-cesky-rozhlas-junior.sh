@@ -22,7 +22,11 @@ DEBUG=false
 
 function printHelp() {
     echo -n "Awesome super duper overengineered script to download stuff from Cesky Rozhlas Junor
-Usage:  $(basename "$0") [OPTs] URL
+Usage:  $(basename "$0") [OPTs] URLs
+
+    URL -- URLs (space separated) of radio streams to be downloaded
+           no param prior this is needed, it's NOT positional
+
     -h|--help             -- prints this help
     -c|--chars \"$CHARS\" -- replace these chars in filename by \"_\"
                              mp3 tag is not affected
