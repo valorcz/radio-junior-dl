@@ -20,6 +20,8 @@ URL=''
 DEBUG=false
 #INTERACTIVE=false
 ESCAPECHARS="!?. ;:"
+outputDirectory='.'
+onlyOneTrack=false
 
 function printHelp() {
     echo -n "Awesome super duper overengineered script to download stuff from Cesky Rozhlas Junor
@@ -29,6 +31,7 @@ Usage:  $(basename "$0") [OPTs] URLs
            no param prior this is needed, it's NOT positional
 
     -h|--help             -- prints this help
+
     -c|--chars \"$CHARS\" -- replace these chars in filename by \"_\"
                              mp3 tag is not affected
     --debug               -- enables debug output
@@ -62,16 +65,20 @@ function verifyFunctions() {
 
 function debugPrint() {
     if ( $DEBUG ); then
-        echo "$@"
+        echo "DEBUG: $*"
     fi
 }
 
 function parseArgs() {
     while [ $# -gt 0 ]; do
         case $1 in
-            -h|--help) printHelp; exit; shift;;
+            -h|--help) printHelp; exit 0; shift;;
             -d|--debug|-v|--verb) DEBUG=true ; shift;;
             -c|--chars) ESCAPECHARS="$2"; shift 2;;
+            -t|--total) cmdTotalTracks="$2"; shift 2;;
+            -n|--onlyTrack) onlyOneTrack=true; onlyOneTrackID="$2"; shift 2;;
+            -of|--output-file) cmdOutputFilename="$2"; shift 2;;
+            -od|--output-dir) outputDirectory="$2"; shift 2;;
             #--interactive|-i) INTERACTIVE=true; shift ;;
             *)  URLs="$URLs $1"
                 shift
@@ -88,7 +95,19 @@ function fillValues() {
     description="$( echo "${content}" | pup --charset utf-8  'meta[name="description"]' json{} | jq -c '.[] | .content' )"
 
     # If items are empty, we may be downloading from a page with a single file
-    if [ -z "${items}" ]; then
+    if [ "${items}" ]; then
+        serial=true
+        if [ "$cmdTotalTracks" ]; then
+            totalTracks="$cmdTotalTracks"
+        else
+            totalTracks="$(echo "${content}" | pup --charset utf-8 'div[class="b-041k__metadata"]' json{} | jq -c '.[] | { name:  .children[].text} | select(.name != null)' | awk '{print $(NF-1)}')"
+        fi
+        if [ "${cmdOutputFilename}" ] && [ ! "${onlyOneTrack}" ]; then
+            echo "ERROR: Was set filename on serial -- this is not working, please remove it from CMD" >&2
+            exit 1
+        fi
+    else
+        serial=false
         items="${item}"
     fi
 
@@ -104,17 +123,31 @@ function doDownload() {
     do
         url="$(echo """${line}"""| jq -r '.href')"
         # Neuter the name a bit, even though it could be better
-        FileName="$(echo """${line}""" | jq -r '.name' | tr -s "$ESCAPECHARS" '_' | sed -e's/^_//g' )"
+        if [ "${cmdOutputFilename}" ]; then
+            FileName="${cmdOutputFilename}"
+        else
+            FileName="$(echo """${line}""" | jq -r '.name' | tr -s "$ESCAPECHARS" '_' | sed -e's/^_//g' )"
+        fi
         OrigName="$(echo """${line}""" | jq -r '.name' )"
         #if the file exists and has a size greater than zero
         if [ -s "${FileName}.mp3" ]; then
             echo "${FileName} exists, skipping"
             continue
         fi
-        
+
+        if ( "${onlyOneTrack}" ); then
+            [[ "${OrigName}" =~ "${onlyOneTrackID}. díl: "* ]] || continue
+        fi
+
+        if ( "$serial" ); then
+            trackNum="$( echo "${OrigName}" | sed -e's/\. díl:\ .*//g' )"
+        else
+            trackNum=1
+        fi
+
         echo "Downloading to ${FileName}.mp3"
-        curl -# "${url}" -o "${FileName}.mp3"
-         ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --comment="${URL}" "${FileName}.mp3"
+        curl -# "${url}" -o "${outputDirectory}/${FileName}.mp3"
+         ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --comment="${URL}" "${outputDirectory}/${FileName}.mp3"
          
     done < <(printf '%s\n' "${items}")
 }
@@ -128,6 +161,8 @@ function main() {
     for URL in $URLs; do
         items=''
         description=''
+        serial=false
+        [ "$cmdTotalTracks" ] || totalTracks=1
         fillValues
         doDownload
     done
