@@ -86,16 +86,16 @@ function doDownload() {
     do
         url="$(echo """${line}"""| jq -r '.href')"
         # Neuter the name a bit, even though it could be better
-        name="$(echo """${line}""" | jq -r '.name' | tr -s "$ESCAPECHARS" '_' | sed -e's/^_//g' )"
-        clearName="$(echo """${line}""" | jq -r '.name' )"
+        FileName="$(echo """${line}""" | jq -r '.name' | tr -s "$ESCAPECHARS" '_' | sed -e's/^_//g' )"
+        OrigName="$(echo """${line}""" | jq -r '.name' )"
         #if the file exists and has a size greater than zero
-        if [ -s "${name}.mp3" ]; then
-            echo "${name} exists, skipping"
+        if [ -s "${FileName}.mp3" ]; then
+            echo "${FileName} exists, skipping"
             continue
         fi
-        echo "Downloading to ${name}.mp3"
-        curl -# "${url}" -o "${name}.mp3"
-        id3tag -1 -2 --song="${clearName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --comment="${URL}" "${name}.mp3"
+        echo "Downloading to ${FileName}.mp3"
+        curl -# "${url}" -o "${FileName}.mp3"
+        id3tag -1 -2 --song="${OrigName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --comment="${URL}" "${FileName}.mp3"
     done < <(printf '%s\n' "${items}")
 }
 
