@@ -157,7 +157,7 @@ function doDownload() {
 
         echo "Downloading to ${FileName}.mp3"
         curl -# "${url}" -o "${outputDirectory}/${FileName}.mp3"
-         ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --comment="${URL}" "${outputDirectory}/${FileName}.mp3"
+        ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --comment="${URL}" "${outputDirectory}/${FileName}.mp3"
          
     done < <(printf '%s\n' "${items}")
 }
