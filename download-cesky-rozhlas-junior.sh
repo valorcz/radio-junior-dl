@@ -30,7 +30,17 @@ Usage:  $(basename "$0") [OPTs] URLs
     URL -- URLs (space separated) of radio streams to be downloaded
            no param prior this is needed, it's NOT positional
 
-    -h|--help             -- prints this help
+    -h|--help           prints this help
+
+    -t|--total          If serial and total number of parts was not 
+                        determined properly OR for some reason you can 
+                        overwrite the automatically determined number
+    -n|--onlyTrack      If serial, download ONLY track number n
+    -of|--output-file   Set output file name. Will NOT work with multiple
+                        URLs nor if the requested is serial
+    -od|--output-dir    PATH where to store downloaded file(s)
+                        Will NOT create directory by default
+
 
     -c|--chars \"$CHARS\" -- replace these chars in filename by \"_\"
                              mp3 tag is not affected
