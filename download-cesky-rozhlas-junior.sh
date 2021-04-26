@@ -140,8 +140,8 @@ function doDownload() {
         fi
         OrigName="$(echo """${line}""" | jq -r '.name' )"
         #if the file exists and has a size greater than zero
-        if [ -s "${FileName}.mp3" ]; then
-            echo "${FileName} exists, skipping"
+        if [ -s "${outputDirectory}/${FileName}.mp3" ]; then
+            echo "${outputDirectory}/${FileName} exists, skipping"
             continue
         fi
 
@@ -155,7 +155,7 @@ function doDownload() {
             trackNum=1
         fi
 
-        echo "Downloading to ${FileName}.mp3"
+        echo "Downloading to ${outputDirectory}/${FileName}.mp3"
         curl -# "${url}" -o "${outputDirectory}/${FileName}.mp3"
         ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --comment="${URL}" "${outputDirectory}/${FileName}.mp3"
          
