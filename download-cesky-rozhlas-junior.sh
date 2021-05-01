@@ -22,6 +22,7 @@ DEBUG=false
 ESCAPECHARS="!?. ;:"
 outputDirectory='.'
 onlyOneTrack=false
+MKDIR=false
 
 function printHelp() {
     echo -n "Awesome super duper overengineered script to download stuff from Cesky Rozhlas Junor
@@ -40,6 +41,8 @@ Usage:  $(basename "$0") [OPTs] URLs
                         URLs nor if the requested is serial
     -od|--output-dir    PATH where to store downloaded file(s)
                         Will NOT create directory by default
+    --mkdir             if output directory does not exists, will try to
+                        create one
 
 
     -c|--chars \"$CHARS\" -- replace these chars in filename by \"_\"
@@ -84,6 +87,7 @@ function parseArgs() {
         case $1 in
             -h|--help) printHelp; exit 0; shift;;
             -d|--debug|-v|--verb) DEBUG=true ; shift;;
+            --mkdir) MKDIR=true ; shift;;
             -c|--chars) ESCAPECHARS="$2"; shift 2;;
             -t|--total) cmdTotalTracks="$2"; shift 2;;
             -n|--onlyTrack) onlyOneTrack=true; onlyOneTrackID="$2"; shift 2;;
@@ -140,10 +144,25 @@ function doDownload() {
         fi
         OrigName="$(echo """${line}""" | jq -r '.name' )"
         #if the file exists and has a size greater than zero
+
+        if [ ! -d "${outputDirectory}" ]; then
+            if ( "${MKDIR}" ); then
+                
+                if ( ! mkdir -p "${outputDirectory}"); then
+                    echo "Create of ${outputDirectory} failed, please run manually 'mkdir -p ${outputDirectory}' and investigate"
+                    exit 11
+                fi
+            else
+                echo "Directory ${outputDirectory} does not exists, use --mkdir to create or create before"
+                exit 12
+            fi
+        fi
+
         if [ -s "${outputDirectory}/${FileName}.mp3" ]; then
             echo "${outputDirectory}/${FileName} exists, skipping"
             continue
         fi
+
 
         if ( "${onlyOneTrack}" ); then
             [[ "${OrigName}" =~ "${onlyOneTrackID}. díl: "* ]] || continue
