@@ -147,8 +147,8 @@ function doDownload() {
 
         if [ ! -d "${outputDirectory}" ]; then
             if ( "${MKDIR}" ); then
-                mkdir -p ${outputDirectory}
-                if [ $? != 0 ]; then
+                mkdir -p "${outputDirectory}"
+                if [ "$?" != 0 ]; then
                     echo "Create of ${outputDirectory} failed, please run manually 'mkdir -p ${outputDirectory}' and investigate"
                     exit 11
                 fi
