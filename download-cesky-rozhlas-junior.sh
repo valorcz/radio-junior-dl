@@ -145,7 +145,7 @@ function doDownload() {
         OrigName="$(echo """${line}""" | jq -r '.name' )"
         #if the file exists and has a size greater than zero
 
-        if [ ! -d ${outputDirectory} ]; then
+        if [ ! -d "${outputDirectory}" ]; then
             if ( "${MKDIR}" ); then
                 mkdir -p ${outputDirectory}
                 if [ $? != 0 ]; then
