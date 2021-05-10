@@ -157,7 +157,7 @@ function doDownload() {
         if ( $EnableCron ); then
             debugPrint "Serial + Cron detected, changing path"
             origOD="${outputDirectory}"
-            outputDirectory="${outputDirectory}"/"${title}"
+            outputDirectory="${outputDirectory}"/"$( echo "${title}" | tr -s "$ESCAPECHARS" '_' | tr '@' 'a' | sed -e's/^_//g' )"
             debugPrint "origOD=$origOD"
             debugPrint "outputDirectory=$outputDirectory"
         fi
