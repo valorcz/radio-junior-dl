@@ -108,13 +108,14 @@ function parseArgs() {
 
 function fillValues() {
     # This ugly thing will turn the HTML page into an array of URLs & episode names
+    debugPrint "Processing $URL"
     content="$( curl -s "${URL}" )"
     items="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .children[].children[].text }' 2>/dev/null )"
     item="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .text }' 2>/dev/null )"
-    title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .children[].title }' 2>/dev/null |  jq -c -r '.title'_2>/dev/null )"
+    title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .children[].title }' 2>/dev/null |  jq -c -r '.title' 2>/dev/null | sort -u )"
     [ "$title" ] || title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .text }' |  jq -c -r '.title' 2>/dev/null )"
     description="$( echo "${content}" | pup --charset utf-8  'meta[name="description"]' json{} | jq -c '.[] | .content' )"
-
+    debugPrint "title=$title"
     # If items are empty, we may be downloading from a page with a single file
     if [ "${items}" ]; then
         serial=true
@@ -142,20 +143,24 @@ function fillValues() {
 function doDownload() {
     while IFS= read -r line
     do
+  #  echo $line
         url="$(echo """${line}"""| jq -r '.href')"
         # Neuter the name a bit, even though it could be better
         if [ "${cmdOutputFilename}" ]; then
             FileName="${cmdOutputFilename}"
         else
-            FileName="$(echo """${line}""" | jq -r '.name' | tr -s "$ESCAPECHARS" '_' | sed -e's/^_//g' )"
+            FileName="$(echo """${line}""" | jq -r '.name' | tr -s "$ESCAPECHARS" '_' | tr '@' 'a' | sed -e's/^_//g' )"
         fi
         OrigName="$(echo """${line}""" | jq -r '.name' )"
         #if the file exists and has a size greater than zero
 
-        #~ if ( $EnableCron ); then
-            #~ origOD="${outputDirectory}"
-            #~ outputDirectory="${outputDirectory}"/"${title}"
-        #~ fi
+        if ( $EnableCron ); then
+            debugPrint "Serial + Cron detected, changing path"
+            origOD="${outputDirectory}"
+            outputDirectory="${outputDirectory}"/"${title}"
+            debugPrint "origOD=$origOD"
+            debugPrint "outputDirectory=$outputDirectory"
+        fi
 
         if [ ! -d "${outputDirectory}" ]; then
             if ( "${MKDIR}" ); then
@@ -172,12 +177,24 @@ function doDownload() {
 
         if [ -s "${outputDirectory}/${FileName}.mp3" ]; then
             echo "${outputDirectory}/${FileName} exists, skipping"
+            if ( "${EnableCron}" ); then
+                debugPrint "Reverting path updating"
+                outputDirectory="${origOD}"
+                debugPrint "outputDirectory=$outputDirectory"
+            fi
             continue
         fi
 
 
         if ( "${onlyOneTrack}" ); then
-            [[ "${OrigName}" =~ "${onlyOneTrackID}. díl: "* ]] || continue
+            if [[ ! "${OrigName}" =~ "${onlyOneTrackID}. díl: "* ]] ; then
+                if ( "${EnableCron}" ); then
+                    debugPrint "Reverting path updating"
+                    outputDirectory="${origOD}"
+                    debugPrint "outputDirectory=$outputDirectory"
+                fi
+                continue
+            fi
         fi
 
         if ( "$serial" ); then
@@ -185,13 +202,15 @@ function doDownload() {
         else
             trackNum=1
         fi
-        
+
         echo "Downloading to ${outputDirectory}/${FileName}.mp3"
         curl -# "${url}" -o "${outputDirectory}/${FileName}.mp3"
-        ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --comment="${URL}" "${outputDirectory}/${FileName}.mp3"
-        #~ if ( $EnableCron ); then
-            #~ outputDirectory="${origOD}"
-        #~ fi 
+        ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3"
+        if ( "${EnableCron}" ); then
+            debugPrint "Reverting path updating"
+            outputDirectory="${origOD}"
+            debugPrint "outputDirectory=$outputDirectory"
+        fi
     done < <(printf '%s\n' "${items}")
 }
 
@@ -200,7 +219,7 @@ function downloadURLlist() {
     while IFS= read -r line; do
         url="$(echo """${line}"""| jq -r '.href')"
         URLs="$URLs https://junior.rozhlas.cz/$url"
-        #echo "$URLs"
+#echo "$URLs"
     done < <( curl -s "https://junior.rozhlas.cz/pribehy" | pup --charset utf-8 'div[class="b-008d__subblock--content"] a json{}' | jq -c '.[] | { href: .href,name: .text} | select(.name != null)' )
 
 }
