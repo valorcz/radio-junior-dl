@@ -22,6 +22,7 @@ DEBUG=false
 ESCAPECHARS="!?. ;:"
 outputDirectory='.'
 onlyOneTrack=false
+EnableCron=false
 MKDIR=false
 
 function printHelp() {
@@ -43,6 +44,9 @@ Usage:  $(basename "$0") [OPTs] URLs
                         Will NOT create directory by default
     --mkdir             if output directory does not exists, will try to
                         create one
+
+    --cron              Enable cron run. If enabled -od is mandatory, 
+                        serials will be in output-dir/serial_name/
 
 
     -c|--chars \"$CHARS\" -- replace these chars in filename by \"_\"
@@ -93,6 +97,7 @@ function parseArgs() {
             -n|--onlyTrack) onlyOneTrack=true; onlyOneTrackID="$2"; shift 2;;
             -of|--output-file) cmdOutputFilename="$2"; shift 2;;
             -od|--output-dir) outputDirectory="$2"; shift 2;;
+            --cron) EnableCron=true; MKDIR=true; shift;;
             #--interactive|-i) INTERACTIVE=true; shift ;;
             *)  URLs="$URLs $1"
                 shift
@@ -103,9 +108,11 @@ function parseArgs() {
 
 function fillValues() {
     # This ugly thing will turn the HTML page into an array of URLs & episode names
-    content=$( curl -s "${URL}" )
-    items=$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .children[].children[].text }' 2>/dev/null )
-    item=$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .text }' 2>/dev/null )
+    content="$( curl -s "${URL}" )"
+    items="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .children[].children[].text }' 2>/dev/null )"
+    item="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .text }' 2>/dev/null )"
+    title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .children[].title }' 2>/dev/null |  jq -c -r '.title'_2>/dev/null )"
+    [ "$title" ] || title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .text }' |  jq -c -r '.title' 2>/dev/null )"
     description="$( echo "${content}" | pup --charset utf-8  'meta[name="description"]' json{} | jq -c '.[] | .content' )"
 
     # If items are empty, we may be downloading from a page with a single file
@@ -145,6 +152,11 @@ function doDownload() {
         OrigName="$(echo """${line}""" | jq -r '.name' )"
         #if the file exists and has a size greater than zero
 
+        #~ if ( $EnableCron ); then
+            #~ origOD="${outputDirectory}"
+            #~ outputDirectory="${outputDirectory}"/"${title}"
+        #~ fi
+
         if [ ! -d "${outputDirectory}" ]; then
             if ( "${MKDIR}" ); then
                 
@@ -173,12 +185,24 @@ function doDownload() {
         else
             trackNum=1
         fi
-
+        
         echo "Downloading to ${outputDirectory}/${FileName}.mp3"
         curl -# "${url}" -o "${outputDirectory}/${FileName}.mp3"
         ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --desc="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --comment="${URL}" "${outputDirectory}/${FileName}.mp3"
-         
+        #~ if ( $EnableCron ); then
+            #~ outputDirectory="${origOD}"
+        #~ fi 
     done < <(printf '%s\n' "${items}")
+}
+
+function downloadURLlist() {
+
+    while IFS= read -r line; do
+        url="$(echo """${line}"""| jq -r '.href')"
+        URLs="$URLs https://junior.rozhlas.cz/$url"
+        #echo "$URLs"
+    done < <( curl -s "https://junior.rozhlas.cz/pribehy" | pup --charset utf-8 'div[class="b-008d__subblock--content"] a json{}' | jq -c '.[] | { href: .href,name: .text} | select(.name != null)' )
+
 }
 
 
@@ -186,10 +210,20 @@ function main() {
     parseArgs "$@"
     verifyFunctions "true"  "${mandatoryApps[@]}"
     verifyFunctions "false" "${optionalApps[@]}"
-    
+
+    if ( "$EnableCron" ); then
+        #-od needs to be passed in
+        if [ "${outputDirectory}" == "." ]; then
+            echo "Output directory needs to be passed in with --cron option"
+            exit 3
+        fi
+        downloadURLlist
+    fi
+
     for URL in $URLs; do
         items=''
         description=''
+        title=''
         serial=false
         [ "$cmdTotalTracks" ] || totalTracks=1
         fillValues
