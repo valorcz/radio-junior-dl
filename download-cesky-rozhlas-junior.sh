@@ -149,7 +149,7 @@ function doDownload() {
         if [ "${cmdOutputFilename}" ]; then
             FileName="${cmdOutputFilename}"
         else
-            FileName="$(echo """${line}""" | jq -r '.name' | tr -s "$ESCAPECHARS" '_' | tr '@' 'a' | sed -e's/^_//g' )"
+            FileName="$(echo """${line}""" | jq -r '.name' | tr -s "$ESCAPECHARS" '_' | tr -s '@' 'a' | sed -e's/^_//g' )"
         fi
         OrigName="$(echo """${line}""" | jq -r '.name' )"
         #if the file exists and has a size greater than zero
