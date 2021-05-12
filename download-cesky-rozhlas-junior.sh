@@ -112,8 +112,8 @@ function fillValues() {
     content="$( curl -s "${URL}" )"
     items="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .children[].children[].text }' 2>/dev/null )"
     item="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .text }' 2>/dev/null )"
-    title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .children[].title }' 2>/dev/null |  jq -c -r '.title' 2>/dev/null | sort -u )"
-    [ "$title" ] || title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .text }' |  jq -c -r '.title' 2>/dev/null )"
+    title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .children[].title }' 2>/dev/null |  jq -c -r '.title' 2>/dev/null | sort -u | head -1 )"
+    [ "$title" ] || title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .text }' |  jq -c -r '.title' 2>/dev/null  | sort -u | head -1 )"
     description="$( echo "${content}" | pup --charset utf-8  'meta[name="description"]' json{} | jq -c '.[] | .content' )"
     debugPrint "title=$title"
     # If items are empty, we may be downloading from a page with a single file
