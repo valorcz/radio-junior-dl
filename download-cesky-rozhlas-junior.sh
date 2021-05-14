@@ -137,7 +137,7 @@ function fillValues() {
     # If still empty, something is wrong
     if [ -z "${items}" ]; then
       echo "Nothing found; the script probably needs to be fixed." >&2
-      exit
+      return 
     fi
 }
 
