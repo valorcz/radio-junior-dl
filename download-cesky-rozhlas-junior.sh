@@ -24,6 +24,7 @@ outputDirectory='.'
 onlyOneTrack=false
 EnableCron=false
 MKDIR=false
+DOWNLOADTAG='-#'
 
 function printHelp() {
     echo -n "Awesome super duper overengineered script to download stuff from Cesky Rozhlas Junor
@@ -97,7 +98,7 @@ function parseArgs() {
             -n|--onlyTrack) onlyOneTrack=true; onlyOneTrackID="$2"; shift 2;;
             -of|--output-file) cmdOutputFilename="$2"; shift 2;;
             -od|--output-dir) outputDirectory="$2"; shift 2;;
-            --cron) EnableCron=true; MKDIR=true; shift;;
+            --cron) EnableCron=true; DOWNLOADTAG="-s"; MKDIR=true; shift;;
             #--interactive|-i) INTERACTIVE=true; shift ;;
             *)  URLs="$URLs $1"
                 shift
@@ -176,7 +177,7 @@ function doDownload() {
         fi
 
         if [ -s "${outputDirectory}/${FileName}.mp3" ]; then
-            echo "${outputDirectory}/${FileName} exists, skipping"
+            ( "${EnableCron}" ) || echo "${outputDirectory}/${FileName} exists, skipping"
             if ( "${EnableCron}" ); then
                 debugPrint "Reverting path updating"
                 outputDirectory="${origOD}"
@@ -204,8 +205,11 @@ function doDownload() {
         fi
 
         echo "Downloading to ${outputDirectory}/${FileName}.mp3"
-        curl -# "${url}" -o "${outputDirectory}/${FileName}.mp3"
-        ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3"
+        curl "$DOWNLOADTAG" "${url}" -o "${outputDirectory}/${FileName}.mp3"
+        TMPFILE="$(mktemp)"
+        ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
+        ( "${EnableCron}" ) || cat "${TMPFILE}"
+        rm -f "${TMPFILE}"
         if ( "${EnableCron}" ); then
             debugPrint "Reverting path updating"
             outputDirectory="${origOD}"
