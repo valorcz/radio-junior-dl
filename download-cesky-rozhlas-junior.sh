@@ -105,6 +105,7 @@ function parseArgs() {
                 ;;
         esac
     done
+    ( "${DEBUG}" ) && DOWNLOADTAG="-#"
 }
 
 function fillValues() {
@@ -204,10 +205,10 @@ function doDownload() {
             trackNum=1
         fi
 
-        echo "Downloading to ${outputDirectory}/${FileName}.mp3"
+        ( "${EnableCron}" ) || echo "Downloading to ${outputDirectory}/${FileName}.mp3"
         curl "$DOWNLOADTAG" "${url}" -o "${outputDirectory}/${FileName}.mp3"
         TMPFILE="$(mktemp)"
-        ( command -v id3tag ) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
+        ( command -v id3tag >/dev/null 2>&1) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
         ( "${EnableCron}" ) || cat "${TMPFILE}"
         rm -f "${TMPFILE}"
         if ( "${EnableCron}" ); then
