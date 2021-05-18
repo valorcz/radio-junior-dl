@@ -5,8 +5,8 @@
 #   * jq
 #   * id3tag
 
-mandatoryApps=(pup jq)
-optionalApps=(id3tag)
+mandatoryApps=(pup jq )
+optionalApps=(id3tag iconv)
 
 
 
@@ -25,6 +25,7 @@ onlyOneTrack=false
 EnableCron=false
 MKDIR=false
 DOWNLOADTAG='-#'
+TRANSFORM=true
 
 function printHelp() {
     echo -n "Awesome super duper overengineered script to download stuff from Cesky Rozhlas Junor
@@ -45,6 +46,7 @@ Usage:  $(basename "$0") [OPTs] URLs
                         Will NOT create directory by default
     --mkdir             if output directory does not exists, will try to
                         create one
+    -ntr|--not-transform   Do NOT transform and keep non-ascii chars
 
     --cron              Enable cron run. If enabled -od is mandatory, 
                         serials will be in output-dir/serial_name/
@@ -92,6 +94,7 @@ function parseArgs() {
         case $1 in
             -h|--help) printHelp; exit 0; shift;;
             -d|--debug|-v|--verb) DEBUG=true ; shift;;
+            -ntr|--not-transform) TRANSFORM=false ; shift;;
             --mkdir) MKDIR=true ; shift;;
             -c|--chars) ESCAPECHARS="$2"; shift 2;;
             -t|--total) cmdTotalTracks="$2"; shift 2;;
@@ -111,7 +114,12 @@ function parseArgs() {
 function fillValues() {
     # This ugly thing will turn the HTML page into an array of URLs & episode names
     debugPrint "Processing $URL"
-    content="$( curl -s "${URL}" )"
+    if ( command -v "$APP" >/dev/null 2>&1 ) && ( "${TRANSFORM}" ); then
+        content="$( curl -s "${URL}" | iconv -f UTF8 -t US-ASCII//TRANSLIT 2>/dev/null )"
+    else
+        content="$( curl -s "${URL}" )"
+        debugPrint "Iconv not found, not transforming"
+    fi
     items="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .children[].children[].text }' 2>/dev/null )"
     item="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .text }' 2>/dev/null )"
     title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .children[].title }' 2>/dev/null |  jq -c -r '.title' 2>/dev/null | cut -d':' -f1 | head -1 )"
