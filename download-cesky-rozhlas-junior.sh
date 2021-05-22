@@ -26,6 +26,7 @@ EnableCron=false
 MKDIR=false
 DOWNLOADTAG='-#'
 TRANSFORM=true
+IGNORELIST=''
 
 function printHelp() {
     echo -n "Awesome super duper overengineered script to download stuff from Cesky Rozhlas Junor
@@ -47,6 +48,17 @@ Usage:  $(basename "$0") [OPTs] URLs
     --mkdir             if output directory does not exists, will try to
                         create one
     -ntr|--not-transform   Do NOT transform and keep non-ascii chars
+
+    -i|--ignore         File (path) with files to skip (not all stories
+                        are worthy to download/listen more then once.
+                        You can either:
+                        * URL or it's part of page with story 
+                            (to be found in description tag)
+                        * Name of the file (after transformations)
+                        This is matched as parts, beware however of too 
+                        generic part (ie matching 'junior' will just cause
+                        nothing will be downloaded).
+                        One match per line
 
     --cron              Enable cron run. If enabled -od is mandatory, 
                         serials will be in output-dir/serial_name/
@@ -97,6 +109,7 @@ function parseArgs() {
             -ntr|--not-transform) TRANSFORM=false ; shift;;
             --mkdir) MKDIR=true ; shift;;
             -c|--chars) ESCAPECHARS="$2"; shift 2;;
+            -i|--ignore) IGNORELIST="$2";  shift 2;;
             -t|--total) cmdTotalTracks="$2"; shift 2;;
             -n|--onlyTrack) onlyOneTrack=true; onlyOneTrackID="$2"; shift 2;;
             -of|--output-file) cmdOutputFilename="$2"; shift 2;;
@@ -109,6 +122,11 @@ function parseArgs() {
         esac
     done
     ( "${DEBUG}" ) && DOWNLOADTAG="-#"
+
+    if [ ! -s "$IGNORELIST" ]; then 
+        echo "WARNING: Ignore list was not found" >&2 ;
+        IGNORELIST=''
+    fi
 }
 
 function fillValues() {
@@ -163,7 +181,9 @@ function doDownload() {
         fi
         OrigName="$(echo """${line}""" | jq -r '.name' )"
         #if the file exists and has a size greater than zero
-
+        for IgnoreItem in "$URL" "$FileName" "$OrigName"; do
+            ( matchIgnore "$IgnoreItem" ) || continue
+        done
         if ( $EnableCron ); then
             debugPrint "Serial + Cron detected, changing path"
             origOD="${outputDirectory}"
@@ -237,6 +257,21 @@ function downloadURLlist() {
 
 }
 
+function matchIgnore() {
+    STRING="$1"
+    [ -z "${IGNORELIST}" ] && return
+    while read -r MATCH; do
+        if [[ "${STRING}" =~ ${MATCH} ]]; then
+            echo "WARNING: $STRING is matched by $MATCH from ignorelist $IGNORELIST"
+            echo -e "         URL: $URL will be skipped\n"
+            # 1=false
+            return 1
+        fi
+    done < <( cat "${IGNORELIST}" )
+    true
+    return
+}
+
 
 function main() {
     parseArgs "$@"
@@ -253,6 +288,7 @@ function main() {
     fi
 
     for URL in $URLs; do
+        #( matchIgnore "$URL" ) || continue
         items=''
         description=''
         title=''
