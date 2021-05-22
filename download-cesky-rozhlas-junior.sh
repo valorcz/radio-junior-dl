@@ -47,6 +47,7 @@ Usage:  $(basename "$0") [OPTs] URLs
     --mkdir             if output directory does not exists, will try to
                         create one
     -ntr|--not-transform   Do NOT transform and keep non-ascii chars
+                        Default on MacOS
 
     --cron              Enable cron run. If enabled -od is mandatory, 
                         serials will be in output-dir/serial_name/
@@ -114,7 +115,7 @@ function parseArgs() {
 function fillValues() {
     # This ugly thing will turn the HTML page into an array of URLs & episode names
     debugPrint "Processing $URL"
-    if ( command -v "$APP" >/dev/null 2>&1 ) && ( "${TRANSFORM}" ); then
+    if ( command -v "$APP" >/dev/null 2>&1 ) && ( "${TRANSFORM}" ) && [ "$(uname -s)" != "Darwin" ]; then
         content="$( curl -s "${URL}" | iconv -f UTF8 -t US-ASCII//TRANSLIT 2>/dev/null )"
     else
         content="$( curl -s "${URL}" )"
