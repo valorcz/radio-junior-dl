@@ -18,7 +18,6 @@ optionalApps=(id3tag iconv)
 ################################
 URL=''
 DEBUG=false
-#INTERACTIVE=false
 ESCAPECHARS="!?. ;:"
 outputDirectory='.'
 onlyOneTrack=false
@@ -26,7 +25,7 @@ EnableCron=false
 MKDIR=false
 DOWNLOADTAG='-#'
 TRANSFORM=true
-IGNORELIST=''
+IGNORELIST="$HOME/.config/radiojunior/skip.list"
 
 function printHelp() {
     echo -n "Awesome super duper overengineered script to download stuff from Cesky Rozhlas Junor
@@ -60,6 +59,7 @@ Usage:  $(basename "$0") [OPTs] URLs
                         generic part (ie matching 'junior' will just cause
                         nothing will be downloaded).
                         One match per line
+                        The default is ~/.config/radiojunior/skip.list
 
     --cron              Enable cron run. If enabled -od is mandatory, 
                         serials will be in output-dir/serial_name/
@@ -116,7 +116,6 @@ function parseArgs() {
             -of|--output-file) cmdOutputFilename="$2"; shift 2;;
             -od|--output-dir) outputDirectory="$2"; shift 2;;
             --cron) EnableCron=true; DOWNLOADTAG="-s"; MKDIR=true; shift;;
-            #--interactive|-i) INTERACTIVE=true; shift ;;
             *)  URLs="$URLs $1"
                 shift
                 ;;
@@ -124,10 +123,16 @@ function parseArgs() {
     done
     ( "${DEBUG}" ) && DOWNLOADTAG="-#"
 
-    if [ ! -s "$IGNORELIST" ]; then 
-        echo "WARNING: Ignore list was not found" >&2 ;
-        IGNORELIST=''
+    if [ ! -f "$IGNORELIST" ]; then 
+        echo "WARNING: Ignore list was not found, using and setting default to $HOME/.config/radiojunior/skip.list" >&2 ;
+        IGNORELIST="$HOME/.config/radiojunior/skip.list"
     fi
+    
+    
+    
+    [ -d "$(dirname "$IGNORELIST")" ] || mkdir -p "$(dirname "$IGNORELIST")"
+    [ -f "$IGNORELIST" ] || touch "$IGNORELIST"
+    
 }
 
 function fillValues() {
@@ -260,7 +265,7 @@ function downloadURLlist() {
 
 function matchIgnore() {
     STRING="$1"
-    [ -z "${IGNORELIST}" ] && return
+    [ -s "${IGNORELIST}" ] || return
     while read -r MATCH; do
         if [[ "${STRING}" =~ ${MATCH} ]]; then
             echo "WARNING: $STRING is matched by $MATCH from ignorelist $IGNORELIST"
