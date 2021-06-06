@@ -124,13 +124,15 @@ function parseArgs() {
     ( "${DEBUG}" ) && DOWNLOADTAG="-#"
 
     if [ ! -f "$IGNORELIST" ]; then 
-        echo "WARNING: Ignore list was not found" >&2 ;
+        echo "WARNING: Ignore list was not found, using and setting default to $HOME/.config/radiojunior/skip.list" >&2 ;
         IGNORELIST="$HOME/.config/radiojunior/skip.list"
     fi
     
-    if [ ! -f "$IGNORELIST" ]; then
-        touch "$IGNORELIST"
-    fi
+    
+    
+    [ -d "$(dirname "$IGNORELIST")" ] || mkdir -p "$(dirname "$IGNORELIST")"
+    [ -f "$IGNORELIST" ] || touch "$IGNORELIST"
+    
 }
 
 function fillValues() {
