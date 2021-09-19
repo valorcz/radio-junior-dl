@@ -280,7 +280,7 @@ function matchIgnore() {
             # 1=false
             return 1
         fi
-    done < <( cat "${IGNORELIST}" | sed -e'/^$/d' )
+    done < <( sed -e'/^$/d' "${IGNORELIST}" )
     true
     return
 }
