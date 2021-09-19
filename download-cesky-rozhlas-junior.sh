@@ -274,7 +274,7 @@ function matchIgnore() {
     STRING="$1"
     [ -s "${IGNORELIST}" ] || return
     while read -r MATCH; do
-        if [[ "${STRING}" =~ "${MATCH}" ]]; then
+        if [[ "${STRING}" =~ ${MATCH} ]]; then
             echo "WARNING: $STRING is matched by $MATCH from ignorelist $IGNORELIST"
             echo -e "         URL: $URL will be skipped\n"
             # 1=false
