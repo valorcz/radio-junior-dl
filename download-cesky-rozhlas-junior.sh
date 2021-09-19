@@ -147,9 +147,13 @@ function fillValues() {
     items="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .children[].children[].text }' 2>/dev/null )"
     item="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .text }' 2>/dev/null )"
     title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .children[].title }' 2>/dev/null |  jq -c -r '.title' 2>/dev/null | cut -d':' -f1 | head -1 )"
+    album="$(echo "${content}" | pup --charset utf-8 'meta[name=twitter:title] json{}' | jq -c '.[] | { album: .content }' | jq -c -r '.album' 2>/dev/null | awk -F'[|.]*' '{print $1}' | sed -e's/[[:space:]]$//g' )"
     [ "$title" ] || title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .text }' |  jq -c -r '.title' 2>/dev/null  | cut -d':' -f1 | head -1 )"
     description="$( echo "${content}" | pup --charset utf-8  'meta[name="description"]' json{} | jq -c '.[] | .content' )"
-    debugPrint "title=$title"
+    debugPrint "title=$title"  
+    debugPrint "item=$item"  
+    debugPrint "items=$items"  
+    debugPrint "album=\"$album\""  
     # If items are empty, we may be downloading from a page with a single file
     if [ "${items}" ]; then
         serial=true
@@ -166,6 +170,8 @@ function fillValues() {
         serial=false
         items="${item}"
     fi
+    debugPrint "totalTracks=$totalTracks"
+    debugPrint "serial: $serial"
 
     # If still empty, something is wrong
     if [ -z "${items}" ]; then
@@ -193,7 +199,7 @@ function doDownload() {
         if ( $EnableCron ); then
             debugPrint "Serial + Cron detected, changing path"
             origOD="${outputDirectory}"
-            outputDirectory="${outputDirectory}"/"$( echo "${title}" | tr -s "$ESCAPECHARS" '_' | tr '@' 'a' | sed -e's/^_//g' )"
+            outputDirectory="${outputDirectory}"/"$( echo "${album}" | tr -s "$ESCAPECHARS" '_' | tr '@' 'a' | sed -e's/^_//g' )"
             debugPrint "origOD=$origOD"
             debugPrint "outputDirectory=$outputDirectory"
         fi
@@ -238,11 +244,12 @@ function doDownload() {
         else
             trackNum=1
         fi
+        debugPrint "trackNum=$trackNum"
 
         ( "${EnableCron}" ) || echo "Downloading to ${outputDirectory}/${FileName}.mp3"
         curl "$DOWNLOADTAG" "${url}" -o "${outputDirectory}/${FileName}.mp3"
         TMPFILE="$(mktemp)"
-        ( command -v id3tag >/dev/null 2>&1) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album='Radio Junior' --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
+        ( command -v id3tag >/dev/null 2>&1) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album="${album}" --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
         ( "${EnableCron}" ) || cat "${TMPFILE}"
         rm -f "${TMPFILE}"
         if ( "${EnableCron}" ); then
@@ -267,13 +274,13 @@ function matchIgnore() {
     STRING="$1"
     [ -s "${IGNORELIST}" ] || return
     while read -r MATCH; do
-        if [[ "${STRING}" =~ ${MATCH} ]]; then
+        if [[ "${STRING}" =~ "${MATCH}" ]]; then
             echo "WARNING: $STRING is matched by $MATCH from ignorelist $IGNORELIST"
             echo -e "         URL: $URL will be skipped\n"
             # 1=false
             return 1
         fi
-    done < <( cat "${IGNORELIST}" )
+    done < <( cat "${IGNORELIST}" | sed -e'/^$/d' )
     true
     return
 }
