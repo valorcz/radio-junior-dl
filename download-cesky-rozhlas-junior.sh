@@ -145,24 +145,34 @@ function fillValuesNew() {
         debugPrint "Iconv not found, not transforming"
     fi
 
+    # Extract the JSON powering the audio player of Cesky rozhlas
     content_json="$( echo "${content}" | pup --charset utf-8 -p -i 4 'div.mujRozhlasPlayer attr{data-player}' )"
-   # TODO: Check if it contains a valid JSON
+    # Check if it contains a valid JSON
+    if ! [ -n "${content_json}" ] && ( jq -e . >/dev/null 2>&1 <<<"${content_json}" ); then
+        echo "Failed to parse JSON, or got false/null"
+        return
+    fi
 
+    # Populate some metadata, so that we can properly set id3tags
     items="$( echo "${content_json}" | jq -c '.data.playlist[] | { href: .audioLinks[].url, name: .title }' 2>/dev/null )"
-    description="$( echo "${content_json}" | jq -c '.data.series.title' )"
-    title="$( echo "${content_json}" | jq -c '.meta.ga.contentNameShort' )"
+    description="$( echo "${content_json}" | jq -rc '.data.series.title' )"
+    title="$( echo "${content_json}" | jq -rc '.data.playlist[].meta.ga.contentNameShort' | sort -u )"
+    creator="$( echo "${content_json}" | jq -rc '.data.playlist[].meta.ga.contentCreator' | sort -u )"
 
+    # Debug. Debug. Debug.
     debugPrint "title=$title"  
     debugPrint "item=$item"  
     debugPrint "items=$items"  
     debugPrint "album=\"$album\""  
+    debugPrint "creator=\"$creator\""  
+
     # If items are empty, we may be downloading from a page with a single file
     if [ "${items}" ]; then
         serial=true
         if [ "$cmdTotalTracks" ]; then
             totalTracks="$cmdTotalTracks"
         else
-            totalTracks="$(echo "${content}" | pup --charset utf-8 'div[class="b-041k__metadata"]' json{} | jq -c '.[] | { name:  .children[].text} | select(.name != null)' | awk '{print $(NF-1)}')"
+            totalTracks="$( echo "${content_json}" | jq -rc '.data.series.totalParts' )"
         fi
         if [ "${cmdOutputFilename}" ] && [ ! "${onlyOneTrack}" ]; then
             echo "ERROR: Was set filename on serial -- this is not working, please remove it from CMD" >&2
@@ -296,7 +306,7 @@ function doDownload() {
         ( "${EnableCron}" ) || echo "Downloading to ${outputDirectory}/${FileName}.mp3"
         curl "$DOWNLOADTAG" "${url}" -o "${outputDirectory}/${FileName}.mp3"
         TMPFILE="$(mktemp)"
-        ( command -v id3tag >/dev/null 2>&1) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album="${album}" --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
+        ( command -v id3tag >/dev/null 2>&1) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album="${album}" --genre=101 --artist="${creator}" --total="${totalTracks}"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
         ( "${EnableCron}" ) || cat "${TMPFILE}"
         rm -f "${TMPFILE}"
         if ( "${EnableCron}" ); then
