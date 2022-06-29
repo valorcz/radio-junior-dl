@@ -148,7 +148,7 @@ function fillValuesNew() {
     # Extract the JSON powering the audio player of Cesky rozhlas
     content_json="$( echo "${content}" | pup --charset utf-8 -p -i 4 'div.mujRozhlasPlayer attr{data-player}' )"
     # Check if it contains a valid JSON
-    if ! [ -n "${content_json}" ] && ( jq -e . >/dev/null 2>&1 <<<"${content_json}" ); then
+    if [ -z "${content_json}" ] && ! ( jq -e . >/dev/null 2>&1 <<<"${content_json}" ); then
         echo "Failed to parse JSON, or got false/null"
         return
     fi
