@@ -135,6 +135,53 @@ function parseArgs() {
     
 }
 
+function fillValuesNew() {
+    # This ugly thing will turn the HTML page into an array of URLs & episode names
+    debugPrint "Processing $URL in a new way"
+    if ( command -v "$APP" >/dev/null 2>&1 ) && ( "${TRANSFORM}" ) && [ "$(uname -s)" != "Darwin" ]; then
+        content="$( curl -s "${URL}" | iconv -f UTF8 -t US-ASCII//TRANSLIT 2>/dev/null )"
+    else
+        content="$( curl -s "${URL}" )"
+        debugPrint "Iconv not found, not transforming"
+    fi
+
+    content_json="$( echo "${content}" | pup --charset utf-8 -p -i 4 'div.mujRozhlasPlayer attr{data-player}' )"
+   # TODO: Check if it contains a valid JSON
+
+    items="$( echo "${content_json}" | jq -c '.data.playlist[] | { href: .audioLinks[].url, name: .title }' 2>/dev/null )"
+    description="$( echo "${content_json}" | jq -c '.data.series.title' )"
+    title="$( echo "${content_json}" | jq -c '.meta.ga.contentNameShort' )"
+
+    debugPrint "title=$title"  
+    debugPrint "item=$item"  
+    debugPrint "items=$items"  
+    debugPrint "album=\"$album\""  
+    # If items are empty, we may be downloading from a page with a single file
+    if [ "${items}" ]; then
+        serial=true
+        if [ "$cmdTotalTracks" ]; then
+            totalTracks="$cmdTotalTracks"
+        else
+            totalTracks="$(echo "${content}" | pup --charset utf-8 'div[class="b-041k__metadata"]' json{} | jq -c '.[] | { name:  .children[].text} | select(.name != null)' | awk '{print $(NF-1)}')"
+        fi
+        if [ "${cmdOutputFilename}" ] && [ ! "${onlyOneTrack}" ]; then
+            echo "ERROR: Was set filename on serial -- this is not working, please remove it from CMD" >&2
+            exit 1
+        fi
+    else
+        serial=false
+        items="${item}"
+    fi
+    debugPrint "totalTracks=$totalTracks"
+    debugPrint "serial: $serial"
+
+    # If still empty, something is wrong
+    if [ -z "${items}" ]; then
+      echo "Nothing found; the script probably needs to be fixed." >&2
+      return 
+    fi
+}
+
 function fillValues() {
     # This ugly thing will turn the HTML page into an array of URLs & episode names
     debugPrint "Processing $URL"
@@ -307,7 +354,7 @@ function main() {
         title=''
         serial=false
         [ "$cmdTotalTracks" ] || totalTracks=1
-        fillValues
+        fillValuesNew
         doDownload
     done
 }
