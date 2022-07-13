@@ -137,30 +137,42 @@ function parseArgs() {
 
 function fillValues() {
     # This ugly thing will turn the HTML page into an array of URLs & episode names
-    debugPrint "Processing $URL"
+    debugPrint "Processing $URL in a new way"
     if ( command -v "$APP" >/dev/null 2>&1 ) && ( "${TRANSFORM}" ) && [ "$(uname -s)" != "Darwin" ]; then
         content="$( curl -s "${URL}" | iconv -f UTF8 -t US-ASCII//TRANSLIT 2>/dev/null )"
     else
         content="$( curl -s "${URL}" )"
         debugPrint "Iconv not found, not transforming"
     fi
-    items="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .children[].children[].text }' 2>/dev/null )"
-    item="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .text }' 2>/dev/null )"
-    title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .children[].title }' 2>/dev/null |  jq -c -r '.title' 2>/dev/null | cut -d':' -f1 | head -1 )"
-    album="$(echo "${content}" | pup --charset utf-8 'meta[name=twitter:title] json{}' | jq -c '.[] | { album: .content }' | jq -c -r '.album' 2>/dev/null | awk -F'[|.]*' '{print $1}' | sed -e's/[[:space:]]$//g' )"
-    [ "$title" ] || title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .text }' |  jq -c -r '.title' 2>/dev/null  | cut -d':' -f1 | head -1 )"
-    description="$( echo "${content}" | pup --charset utf-8  'meta[name="description"]' json{} | jq -c '.[] | .content' )"
+
+    # Extract the JSON powering the audio player of Cesky rozhlas
+    content_json="$( echo "${content}" | pup --charset utf-8 -p -i 4 'div.mujRozhlasPlayer attr{data-player}' )"
+    # Check if it contains a valid JSON
+    if [ -z "${content_json}" ] && ! ( jq -e . >/dev/null 2>&1 <<<"${content_json}" ); then
+        echo "Failed to parse JSON, or got false/null"
+        return
+    fi
+
+    # Populate some metadata, so that we can properly set id3tags
+    items="$( echo "${content_json}" | jq -c '.data.playlist[] | { href: .audioLinks[].url, name: .title }' 2>/dev/null )"
+    description="$( echo "${content_json}" | jq -rc '.data.series.title' )"
+    title="$( echo "${content_json}" | jq -rc '.data.playlist[].meta.ga.contentNameShort' | sort -u )"
+    creator="$( echo "${content_json}" | jq -rc '.data.playlist[].meta.ga.contentCreator' | sort -u )"
+
+    # Debug. Debug. Debug.
     debugPrint "title=$title"  
     debugPrint "item=$item"  
     debugPrint "items=$items"  
     debugPrint "album=\"$album\""  
+    debugPrint "creator=\"$creator\""  
+
     # If items are empty, we may be downloading from a page with a single file
     if [ "${items}" ]; then
         serial=true
         if [ "$cmdTotalTracks" ]; then
             totalTracks="$cmdTotalTracks"
         else
-            totalTracks="$(echo "${content}" | pup --charset utf-8 'div[class="b-041k__metadata"]' json{} | jq -c '.[] | { name:  .children[].text} | select(.name != null)' | awk '{print $(NF-1)}')"
+            totalTracks="$( echo "${content_json}" | jq -rc '.data.series.totalParts' )"
         fi
         if [ "${cmdOutputFilename}" ] && [ ! "${onlyOneTrack}" ]; then
             echo "ERROR: Was set filename on serial -- this is not working, please remove it from CMD" >&2
@@ -249,7 +261,7 @@ function doDownload() {
         ( "${EnableCron}" ) || echo "Downloading to ${outputDirectory}/${FileName}.mp3"
         curl "$DOWNLOADTAG" "${url}" -o "${outputDirectory}/${FileName}.mp3"
         TMPFILE="$(mktemp)"
-        ( command -v id3tag >/dev/null 2>&1) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album="${album}" --genre=101 --artist="Radio Junior" --total="$totalTracks"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
+        ( command -v id3tag >/dev/null 2>&1) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album="${album}" --genre=101 --artist="${creator}" --total="${totalTracks}"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
         ( "${EnableCron}" ) || cat "${TMPFILE}"
         rm -f "${TMPFILE}"
         if ( "${EnableCron}" ); then
