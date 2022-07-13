@@ -135,7 +135,7 @@ function parseArgs() {
     
 }
 
-function fillValuesNew() {
+function fillValues() {
     # This ugly thing will turn the HTML page into an array of URLs & episode names
     debugPrint "Processing $URL in a new way"
     if ( command -v "$APP" >/dev/null 2>&1 ) && ( "${TRANSFORM}" ) && [ "$(uname -s)" != "Darwin" ]; then
@@ -173,51 +173,6 @@ function fillValuesNew() {
             totalTracks="$cmdTotalTracks"
         else
             totalTracks="$( echo "${content_json}" | jq -rc '.data.series.totalParts' )"
-        fi
-        if [ "${cmdOutputFilename}" ] && [ ! "${onlyOneTrack}" ]; then
-            echo "ERROR: Was set filename on serial -- this is not working, please remove it from CMD" >&2
-            exit 1
-        fi
-    else
-        serial=false
-        items="${item}"
-    fi
-    debugPrint "totalTracks=$totalTracks"
-    debugPrint "serial: $serial"
-
-    # If still empty, something is wrong
-    if [ -z "${items}" ]; then
-      echo "Nothing found; the script probably needs to be fixed." >&2
-      return 
-    fi
-}
-
-function fillValues() {
-    # This ugly thing will turn the HTML page into an array of URLs & episode names
-    debugPrint "Processing $URL"
-    if ( command -v "$APP" >/dev/null 2>&1 ) && ( "${TRANSFORM}" ) && [ "$(uname -s)" != "Darwin" ]; then
-        content="$( curl -s "${URL}" | iconv -f UTF8 -t US-ASCII//TRANSLIT 2>/dev/null )"
-    else
-        content="$( curl -s "${URL}" )"
-        debugPrint "Iconv not found, not transforming"
-    fi
-    items="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .children[].children[].text }' 2>/dev/null )"
-    item="$( echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { href: .href, name: .text }' 2>/dev/null )"
-    title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .children[].title }' 2>/dev/null |  jq -c -r '.title' 2>/dev/null | cut -d':' -f1 | head -1 )"
-    album="$(echo "${content}" | pup --charset utf-8 'meta[name=twitter:title] json{}' | jq -c '.[] | { album: .content }' | jq -c -r '.album' 2>/dev/null | awk -F'[|.]*' '{print $1}' | sed -e's/[[:space:]]$//g' )"
-    [ "$title" ] || title="$(echo "${content}" | pup --charset utf-8 'div[class="sm2-playlist-wrapper"] a json{}' | jq -c '.[] | { title: .text }' |  jq -c -r '.title' 2>/dev/null  | cut -d':' -f1 | head -1 )"
-    description="$( echo "${content}" | pup --charset utf-8  'meta[name="description"]' json{} | jq -c '.[] | .content' )"
-    debugPrint "title=$title"  
-    debugPrint "item=$item"  
-    debugPrint "items=$items"  
-    debugPrint "album=\"$album\""  
-    # If items are empty, we may be downloading from a page with a single file
-    if [ "${items}" ]; then
-        serial=true
-        if [ "$cmdTotalTracks" ]; then
-            totalTracks="$cmdTotalTracks"
-        else
-            totalTracks="$(echo "${content}" | pup --charset utf-8 'div[class="b-041k__metadata"]' json{} | jq -c '.[] | { name:  .children[].text} | select(.name != null)' | awk '{print $(NF-1)}')"
         fi
         if [ "${cmdOutputFilename}" ] && [ ! "${onlyOneTrack}" ]; then
             echo "ERROR: Was set filename on serial -- this is not working, please remove it from CMD" >&2
@@ -364,7 +319,7 @@ function main() {
         title=''
         serial=false
         [ "$cmdTotalTracks" ] || totalTracks=1
-        fillValuesNew
+        fillValues
         doDownload
     done
 }
