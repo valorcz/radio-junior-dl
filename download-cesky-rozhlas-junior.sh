@@ -5,7 +5,7 @@
 #   * jq
 #   * id3tag
 
-mandatoryApps=(pup jq )
+mandatoryApps=(pup jq yt-dlp)
 optionalApps=(id3tag iconv)
 
 
