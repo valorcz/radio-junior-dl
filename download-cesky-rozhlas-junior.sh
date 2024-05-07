@@ -5,7 +5,7 @@
 #   * jq
 #   * id3tag
 
-mandatoryApps=(pup jq )
+mandatoryApps=(pup jq yt-dlp)
 optionalApps=(id3tag iconv)
 
 
@@ -147,10 +147,22 @@ function fillValues() {
 
     # Extract the JSON powering the audio player of Cesky rozhlas
     content_json="$( echo "${content}" | pup --charset utf-8 -p -i 4 'div.mujRozhlasPlayer attr{data-player}' )"
+
     # Check if it contains a valid JSON
     if [ -z "${content_json}" ] && ! ( jq -e . >/dev/null 2>&1 <<<"${content_json}" ); then
+        echo "${content}"
         echo "Failed to parse JSON, or got false/null"
-        return
+        # return
+    fi
+
+    content_mujrozhlas_json="$( echo "${content}" | pup --charset utf-8 -p -i 4 'section.player-wrapper attr{data-entry}' )"
+    mujrozhlas_uuid="$( echo "${content_mujrozhlas_json}" | jq -rc .uuid 2>/dev/null)"
+    URL="https://api.mujrozhlas.cz/episodes/${mujrozhlas_uuid}"
+    if ( command -v "$APP" >/dev/null 2>&1 ) && ( "${TRANSFORM}" ) && [ "$(uname -s)" != "Darwin" ]; then
+        content="$( curl -s "${URL}" | iconv -f UTF8 -t US-ASCII//TRANSLIT 2>/dev/null )"
+    else
+        content="$( curl -s "${URL}" )"
+        debugPrint "Iconv not found, not transforming"
     fi
 
     # Populate some metadata, so that we can properly set id3tags
@@ -229,7 +241,7 @@ function doDownload() {
             fi
         fi
 
-        if [ -s "${outputDirectory}/${FileName}.mp3" ]; then
+        if [ -s "${outputDirectory}/${FileName}.m4a" ]; then
             ( "${EnableCron}" ) || echo "${outputDirectory}/${FileName} exists, skipping"
             if ( "${EnableCron}" ); then
                 debugPrint "Reverting path updating"
@@ -258,10 +270,11 @@ function doDownload() {
         fi
         debugPrint "trackNum=$trackNum"
 
-        ( "${EnableCron}" ) || echo "Downloading to ${outputDirectory}/${FileName}.mp3"
-        curl "$DOWNLOADTAG" "${url}" -o "${outputDirectory}/${FileName}.mp3"
+        ( "${EnableCron}" ) || echo "Downloading to ${outputDirectory}/${FileName}.m4a"
+        # curl "$DOWNLOADTAG" "${url}" -o "${outputDirectory}/${FileName}.mp3"
+        yt-dlp "${url}" -o "${outputDirectory}/${FileName}.m4a"
         TMPFILE="$(mktemp)"
-        ( command -v id3tag >/dev/null 2>&1) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album="${album}" --genre=101 --artist="${creator}" --total="${totalTracks}"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
+        # ( command -v id3tag >/dev/null 2>&1) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album="${album}" --genre=101 --artist="${creator}" --total="${totalTracks}"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.m4a" > "${TMPFILE}"
         ( "${EnableCron}" ) || cat "${TMPFILE}"
         rm -f "${TMPFILE}"
         if ( "${EnableCron}" ); then
