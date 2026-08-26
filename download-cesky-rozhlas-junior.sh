@@ -3,12 +3,10 @@
 # This script requires:
 #   * pup
 #   * jq
-#   * id3tag
+#   * yt-dlp
 
-mandatoryApps=(pup jq )
-optionalApps=(id3tag iconv)
-
-
+mandatoryApps=(pup jq yt-dlp curl)
+optionalApps=(iconv)
 
 ################################
 #
@@ -16,19 +14,22 @@ optionalApps=(id3tag iconv)
 # as it'd default values
 #
 ################################
+URLs=()
 URL=''
 DEBUG=false
 ESCAPECHARS="!?. ;:"
 outputDirectory='.'
 onlyOneTrack=false
+onlyOneTrackID=''
 EnableCron=false
 MKDIR=false
-DOWNLOADTAG='-#'
 TRANSFORM=true
 IGNORELIST="$HOME/.config/radiojunior/skip.list"
+cmdTotalTracks=''
+cmdOutputFilename=''
 
 function printHelp() {
-    echo -n "Awesome super duper overengineered script to download stuff from Cesky Rozhlas Junor
+  echo -n "Awesome super duper overengineered script to download stuff from Cesky Rozhlas Junior
 Usage:  $(basename "$0") [OPTs] URLs
 
     URL -- URLs (space separated) of radio streams to be downloaded
@@ -50,7 +51,7 @@ Usage:  $(basename "$0") [OPTs] URLs
                         Default on MacOS
 
     -i|--ignore         File (path) with files to skip (not all stories
-                        are worthy to download/listen more then once.
+                        are worthy to download/listen more than once).
                         You can either:
                         * URL or it's part of page with story 
                             (to be found in description tag)
@@ -64,264 +65,310 @@ Usage:  $(basename "$0") [OPTs] URLs
     --cron              Enable cron run. If enabled -od is mandatory, 
                         serials will be in output-dir/serial_name/
 
-
-    -c|--chars \"$CHARS\" -- replace these chars in filename by \"_\"
+    -c|--chars \"\$CHARS\" -- replace these chars in filename by \"_\"
                              mp3 tag is not affected
-    --debug               -- enables debug output
+    -d|--debug          -- enables debug output
 
 Needs to have installed:
+    * curl
     * jq 
-    * pup ( https://github.com/ericchiang/pup )
+    * pup (https://github.com/ericchiang/pup)
+    * yt-dlp
 Helps to have installed:
-    * id3tag
+    * iconv
 
 "
-
 }
 
-
 function verifyFunctions() {
-    local MANDATORY="$1"
-    shift
-    appList=("$@")
-    for APP in "${appList[@]}"; do
-        if ( ! command -v "$APP" >/dev/null 2>&1 ); then
-            if ( $MANDATORY ); then
-                echo "ERROR: Application $APP not found" >&2
-                exit 1
-            else
-                echo "WARNING: Application $APP not found, some features will not be provided" >&2
-            fi
-        fi
-    done
+  local MANDATORY="$1"
+  shift
+  local appList=("$@")
+  for APP in "${appList[@]}"; do
+    if ! command -v "$APP" >/dev/null 2>&1; then
+      if [[ "$MANDATORY" == "true" ]]; then
+        echo "ERROR: Application $APP not found" >&2
+        exit 1
+      else
+        echo "WARNING: Application $APP not found, some features will not be provided" >&2
+      fi
+    fi
+  done
 }
 
 function debugPrint() {
-    if ( $DEBUG ); then
-        echo "DEBUG: $*"
-    fi
+  if [[ "$DEBUG" == true ]]; then
+    echo "DEBUG: $*"
+  fi
 }
 
 function parseArgs() {
-    while [ $# -gt 0 ]; do
-        case $1 in
-            -h|--help) printHelp; exit 0; shift;;
-            -d|--debug|-v|--verb) DEBUG=true ; shift;;
-            -ntr|--not-transform) TRANSFORM=false ; shift;;
-            --mkdir) MKDIR=true ; shift;;
-            -c|--chars) ESCAPECHARS="$2"; shift 2;;
-            -i|--ignore) IGNORELIST="$2";  shift 2;;
-            -t|--total) cmdTotalTracks="$2"; shift 2;;
-            -n|--onlyTrack) onlyOneTrack=true; onlyOneTrackID="$2"; shift 2;;
-            -of|--output-file) cmdOutputFilename="$2"; shift 2;;
-            -od|--output-dir) outputDirectory="$2"; shift 2;;
-            --cron) EnableCron=true; DOWNLOADTAG="-s"; MKDIR=true; shift;;
-            *)  URLs="$URLs $1"
-                shift
-                ;;
-        esac
-    done
-    ( "${DEBUG}" ) && DOWNLOADTAG="-#"
+  while [ $# -gt 0 ]; do
+    case $1 in
+    -h | --help)
+      printHelp
+      exit 0
+      ;;
+    -d | --debug | -v | --verb)
+      DEBUG=true
+      shift
+      ;;
+    -ntr | --not-transform)
+      TRANSFORM=false
+      shift
+      ;;
+    --mkdir)
+      MKDIR=true
+      shift
+      ;;
+    -c | --chars)
+      ESCAPECHARS="$2"
+      shift 2
+      ;;
+    -i | --ignore)
+      IGNORELIST="$2"
+      shift 2
+      ;;
+    -t | --total)
+      cmdTotalTracks="$2"
+      shift 2
+      ;;
+    -n | --onlyTrack)
+      onlyOneTrack=true
+      onlyOneTrackID="$2"
+      shift 2
+      ;;
+    -of | --output-file)
+      cmdOutputFilename="$2"
+      shift 2
+      ;;
+    -od | --output-dir)
+      outputDirectory="$2"
+      shift 2
+      ;;
+    --cron)
+      EnableCron=true
+      MKDIR=true
+      shift
+      ;;
+    *)
+      URLs+=("$1")
+      shift
+      ;;
+    esac
+  done
 
-    if [ ! -f "$IGNORELIST" ]; then 
-        echo "WARNING: Ignore list was not found, using and setting default to $HOME/.config/radiojunior/skip.list" >&2 ;
-        IGNORELIST="$HOME/.config/radiojunior/skip.list"
-    fi
-    
-    
-    
-    [ -d "$(dirname "$IGNORELIST")" ] || mkdir -p "$(dirname "$IGNORELIST")"
-    [ -f "$IGNORELIST" ] || touch "$IGNORELIST"
-    
+  local ignoreDir
+  ignoreDir="$(dirname "$IGNORELIST")"
+  if [ ! -d "$ignoreDir" ]; then
+    mkdir -p "$ignoreDir"
+  fi
+  if [ ! -f "$IGNORELIST" ]; then
+    touch "$IGNORELIST"
+  fi
 }
 
 function fillValues() {
-    # This ugly thing will turn the HTML page into an array of URLs & episode names
-    debugPrint "Processing $URL in a new way"
-    if ( command -v "$APP" >/dev/null 2>&1 ) && ( "${TRANSFORM}" ) && [ "$(uname -s)" != "Darwin" ]; then
-        content="$( curl -s "${URL}" | iconv -f UTF8 -t US-ASCII//TRANSLIT 2>/dev/null )"
+  local targetURL="$1"
+  debugPrint "Processing $targetURL"
+
+  local rawContent
+  rawContent="$(curl -s "${targetURL}")"
+
+  if command -v iconv >/dev/null 2>&1 && [[ "$TRANSFORM" == true ]] && [ "$(uname -s)" != "Darwin" ]; then
+    content="$(echo "${rawContent}" | iconv -f UTF8 -t US-ASCII//TRANSLIT 2>/dev/null)"
+  else
+    content="${rawContent}"
+    if [[ "$TRANSFORM" == true ]] && ! command -v iconv >/dev/null 2>&1; then
+      debugPrint "iconv not found, not transforming"
+    fi
+  fi
+
+  # Extract the JSON powering the audio player of Cesky rozhlas
+  content_json="$(echo "${content}" | pup --charset utf-8 -p -i 4 'div.mujRozhlasPlayer attr{data-player}')"
+
+  # Check if it contains a valid JSON
+  if [ -z "${content_json}" ] || ! jq -e . >/dev/null 2>&1 <<<"${content_json}"; then
+    debugPrint "Failed to parse JSON, or got false/null from player"
+  fi
+
+  # Populate metadata
+  items="$(echo "${content_json}" | jq -c '.data.playlist[]? | { href: .audioLinks[]?.url, name: .title }' 2>/dev/null)"
+  description="$(echo "${content_json}" | jq -rc '.data.series.title // empty' 2>/dev/null)"
+  title="$(echo "${content_json}" | jq -rc '.data.playlist[]?.meta.ga.contentNameShort // empty' 2>/dev/null | sort -u)"
+  creator="$(echo "${content_json}" | jq -rc '.data.playlist[]?.meta.ga.contentCreator // empty' 2>/dev/null | sort -u)"
+  album="${description}"
+  if [ -z "$album" ]; then
+    album="$title"
+  fi
+
+  # Debug info
+  debugPrint "title=$title"
+  debugPrint "items=$items"
+  debugPrint "album=$album"
+  debugPrint "creator=$creator"
+
+  if [ -n "${items}" ]; then
+    serial=true
+    if [ -n "$cmdTotalTracks" ]; then
+      totalTracks="$cmdTotalTracks"
     else
-        content="$( curl -s "${URL}" )"
-        debugPrint "Iconv not found, not transforming"
+      totalTracks="$(echo "${content_json}" | jq -rc '.data.series.totalParts // 1' 2>/dev/null)"
     fi
-
-    # Extract the JSON powering the audio player of Cesky rozhlas
-    content_json="$( echo "${content}" | pup --charset utf-8 -p -i 4 'div.mujRozhlasPlayer attr{data-player}' )"
-    # Check if it contains a valid JSON
-    if [ -z "${content_json}" ] && ! ( jq -e . >/dev/null 2>&1 <<<"${content_json}" ); then
-        echo "Failed to parse JSON, or got false/null"
-        return
+    if [ -n "${cmdOutputFilename}" ] && [[ "$onlyOneTrack" != true ]]; then
+      echo "ERROR: Was set filename on serial -- this is not working, please remove it from CMD" >&2
+      exit 1
     fi
+  else
+    serial=false
+    totalTracks=1
+  fi
+  debugPrint "totalTracks=$totalTracks"
+  debugPrint "serial=$serial"
 
-    # Populate some metadata, so that we can properly set id3tags
-    items="$( echo "${content_json}" | jq -c '.data.playlist[] | { href: .audioLinks[].url, name: .title }' 2>/dev/null )"
-    description="$( echo "${content_json}" | jq -rc '.data.series.title' )"
-    title="$( echo "${content_json}" | jq -rc '.data.playlist[].meta.ga.contentNameShort' | sort -u )"
-    creator="$( echo "${content_json}" | jq -rc '.data.playlist[].meta.ga.contentCreator' | sort -u )"
-
-    # Debug. Debug. Debug.
-    debugPrint "title=$title"  
-    debugPrint "item=$item"  
-    debugPrint "items=$items"  
-    debugPrint "album=\"$album\""  
-    debugPrint "creator=\"$creator\""  
-
-    # If items are empty, we may be downloading from a page with a single file
-    if [ "${items}" ]; then
-        serial=true
-        if [ "$cmdTotalTracks" ]; then
-            totalTracks="$cmdTotalTracks"
-        else
-            totalTracks="$( echo "${content_json}" | jq -rc '.data.series.totalParts' )"
-        fi
-        if [ "${cmdOutputFilename}" ] && [ ! "${onlyOneTrack}" ]; then
-            echo "ERROR: Was set filename on serial -- this is not working, please remove it from CMD" >&2
-            exit 1
-        fi
-    else
-        serial=false
-        items="${item}"
-    fi
-    debugPrint "totalTracks=$totalTracks"
-    debugPrint "serial: $serial"
-
-    # If still empty, something is wrong
-    if [ -z "${items}" ]; then
-      echo "Nothing found; the script probably needs to be fixed." >&2
-      return 
-    fi
+  if [ -z "${items}" ]; then
+    echo "Nothing found; the script probably needs to be fixed." >&2
+    return 1
+  fi
+  return 0
 }
 
 function doDownload() {
-    while IFS= read -r line
-    do
-  #  echo $line
-        url="$(echo """${line}"""| jq -r '.href')"
-        # Neuter the name a bit, even though it could be better
-        if [ "${cmdOutputFilename}" ]; then
-            FileName="${cmdOutputFilename}"
-        else
-            FileName="$(echo """${line}""" | jq -r '.name' | tr -s "$ESCAPECHARS" '_' | tr -s '@' 'a' | sed -e's/^_//g' )"
-        fi
-        OrigName="$(echo """${line}""" | jq -r '.name' )"
-        #if the file exists and has a size greater than zero
-        for IgnoreItem in "$URL" "$FileName" "$OrigName"; do
-            ( matchIgnore "$IgnoreItem" ) || continue
-        done
-        if ( $EnableCron ); then
-            debugPrint "Serial + Cron detected, changing path"
-            origOD="${outputDirectory}"
-            outputDirectory="${outputDirectory}"/"$( echo "${album}" | tr -s "$ESCAPECHARS" '_' | tr '@' 'a' | sed -e's/^_//g' )"
-            debugPrint "origOD=$origOD"
-            debugPrint "outputDirectory=$outputDirectory"
-        fi
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    local url
+    url="$(echo "${line}" | jq -r '.href')"
+    local OrigName
+    OrigName="$(echo "${line}" | jq -r '.name')"
 
-        if [ ! -d "${outputDirectory}" ]; then
-            if ( "${MKDIR}" ); then
-                
-                if ( ! mkdir -p "${outputDirectory}"); then
-                    echo "Create of ${outputDirectory} failed, please run manually 'mkdir -p ${outputDirectory}' and investigate"
-                    exit 11
-                fi
-            else
-                echo "Directory ${outputDirectory} does not exists, use --mkdir to create or create before"
-                exit 12
-            fi
-        fi
+    local FileName
+    if [ -n "${cmdOutputFilename}" ]; then
+      FileName="${cmdOutputFilename}"
+    else
+      FileName="$(echo "${OrigName}" | tr -s "$ESCAPECHARS" '_' | tr -s '@' 'a' | sed -e 's/^_//g' -e 's/_$//g')"
+    fi
 
-        if [ -s "${outputDirectory}/${FileName}.mp3" ]; then
-            ( "${EnableCron}" ) || echo "${outputDirectory}/${FileName} exists, skipping"
-            if ( "${EnableCron}" ); then
-                debugPrint "Reverting path updating"
-                outputDirectory="${origOD}"
-                debugPrint "outputDirectory=$outputDirectory"
-            fi
-            continue
-        fi
+    local shouldSkip=false
+    for IgnoreItem in "$URL" "$FileName" "$OrigName"; do
+      if matchIgnore "$IgnoreItem"; then
+        shouldSkip=true
+        break
+      fi
+    done
+    if [[ "$shouldSkip" == true ]]; then
+      continue
+    fi
 
+    local targetDir="${outputDirectory}"
+    if [[ "$EnableCron" == true ]]; then
+      debugPrint "Serial + Cron detected, changing path"
+      local albumSubdir
+      albumSubdir="$(echo "${album}" | tr -s "$ESCAPECHARS" '_' | tr '@' 'a' | sed -e 's/^_//g' -e 's/_$//g')"
+      if [ -n "$albumSubdir" ]; then
+        targetDir="${outputDirectory}/${albumSubdir}"
+      fi
+      debugPrint "targetDir=$targetDir"
+    fi
 
-        if ( "${onlyOneTrack}" ); then
-            if [[ ! "${OrigName}" =~ "${onlyOneTrackID}. díl: "* ]] ; then
-                if ( "${EnableCron}" ); then
-                    debugPrint "Reverting path updating"
-                    outputDirectory="${origOD}"
-                    debugPrint "outputDirectory=$outputDirectory"
-                fi
-                continue
-            fi
+    if [ ! -d "${targetDir}" ]; then
+      if [[ "$MKDIR" == true ]]; then
+        if ! mkdir -p "${targetDir}"; then
+          echo "Create of ${targetDir} failed, please run manually 'mkdir -p ${targetDir}' and investigate" >&2
+          exit 11
         fi
+      else
+        echo "Directory ${targetDir} does not exists, use --mkdir to create or create before" >&2
+        exit 12
+      fi
+    fi
 
-        if ( "$serial" ); then
-            trackNum="$( echo "${OrigName}" | sed -e's/\. díl:\ .*//g' )"
-        else
-            trackNum=1
-        fi
-        debugPrint "trackNum=$trackNum"
+    local fileExists=false
+    for existingFile in "${targetDir}/${FileName}".*; do
+      if [ -s "$existingFile" ]; then
+        fileExists=true
+        break
+      fi
+    done
+    if [[ "$fileExists" == true ]]; then
+      if [[ "$EnableCron" != true ]]; then
+        echo "${targetDir}/${FileName} exists, skipping"
+      fi
+      continue
+    fi
 
-        ( "${EnableCron}" ) || echo "Downloading to ${outputDirectory}/${FileName}.mp3"
-        curl "$DOWNLOADTAG" "${url}" -o "${outputDirectory}/${FileName}.mp3"
-        TMPFILE="$(mktemp)"
-        ( command -v id3tag >/dev/null 2>&1) && id3tag -1 -2 --song="${OrigName}" --comment="${description}" --album="${album}" --genre=101 --artist="${creator}" --total="${totalTracks}"  --track="${trackNum}" --desc="${URL}" "${outputDirectory}/${FileName}.mp3" > "${TMPFILE}"
-        ( "${EnableCron}" ) || cat "${TMPFILE}"
-        rm -f "${TMPFILE}"
-        if ( "${EnableCron}" ); then
-            debugPrint "Reverting path updating"
-            outputDirectory="${origOD}"
-            debugPrint "outputDirectory=$outputDirectory"
-        fi
-    done < <(printf '%s\n' "${items}")
+    if [[ "$onlyOneTrack" == true ]]; then
+      if [[ ! "${OrigName}" =~ ^${onlyOneTrackID}\.\ díl: ]] && [[ ! "${OrigName}" =~ ^0*${onlyOneTrackID}\. ]]; then
+        continue
+      fi
+    fi
+
+    if [[ "$serial" == true ]]; then
+      trackNum="$(echo "${OrigName}" | sed -e 's/\. díl:\ .*//g')"
+    else
+      trackNum=1
+    fi
+    debugPrint "trackNum=$trackNum"
+
+    if [[ "$EnableCron" != true ]]; then
+      echo "Downloading to ${targetDir}/${FileName}.m4a"
+    fi
+
+    yt-dlp "${url}" -o "${targetDir}/${FileName}.%(ext)s"
+  done < <(printf '%s\n' "${items}")
 }
 
 function downloadURLlist() {
-
-    while IFS= read -r line; do
-        url="$(echo """${line}"""| jq -r '.href')"
-        URLs="$URLs https://junior.rozhlas.cz/$url"
-#echo "$URLs"
-    done < <( curl -s "https://junior.rozhlas.cz/pribehy" | pup --charset utf-8 'div[class="b-008d__subblock--content"] a json{}' | jq -c '.[] | { href: .href,name: .text} | select(.name != null)' )
-
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    local url
+    url="$(echo "${line}" | jq -r '.href')"
+    if [ -n "$url" ] && [ "$url" != "null" ]; then
+      URLs+=("https://junior.rozhlas.cz/${url#/}")
+    fi
+  done < <(curl -s "https://junior.rozhlas.cz/pribehy" | pup --charset utf-8 'div[class="b-008d__subblock--content"] a json{}' | jq -c '.[] | { href: .href, name: .text } | select(.name != null)')
 }
 
 function matchIgnore() {
-    STRING="$1"
-    [ -s "${IGNORELIST}" ] || return
-    while read -r MATCH; do
-        if [[ "${STRING}" =~ ${MATCH} ]]; then
-            echo "WARNING: $STRING is matched by $MATCH from ignorelist $IGNORELIST"
-            echo -e "         URL: $URL will be skipped\n"
-            # 1=false
-            return 1
-        fi
-    done < <( sed -e'/^$/d' "${IGNORELIST}" )
-    true
-    return
+  local STRING="$1"
+  [ -s "${IGNORELIST}" ] || return 1
+  while IFS= read -r MATCH; do
+    [[ -z "$MATCH" || "$MATCH" =~ ^[[:space:]]*# ]] && continue
+    if [[ "${STRING}" =~ ${MATCH} ]]; then
+      echo "WARNING: $STRING is matched by $MATCH from ignorelist $IGNORELIST"
+      echo -e "         URL: $URL will be skipped\n"
+      return 0
+    fi
+  done <"${IGNORELIST}"
+  return 1
 }
-
 
 function main() {
-    parseArgs "$@"
-    verifyFunctions "true"  "${mandatoryApps[@]}"
-    verifyFunctions "false" "${optionalApps[@]}"
+  parseArgs "$@"
+  verifyFunctions "true" "${mandatoryApps[@]}"
+  verifyFunctions "false" "${optionalApps[@]}"
 
-    if ( "$EnableCron" ); then
-        #-od needs to be passed in
-        if [ "${outputDirectory}" == "." ]; then
-            echo "Output directory needs to be passed in with --cron option"
-            exit 3
-        fi
-        downloadURLlist
+  if [[ "$EnableCron" == true ]]; then
+    if [ "${outputDirectory}" == "." ]; then
+      echo "Output directory needs to be passed in with --cron option" >&2
+      exit 3
     fi
+    downloadURLlist
+  fi
 
-    for URL in $URLs; do
-        #( matchIgnore "$URL" ) || continue
-        items=''
-        description=''
-        title=''
-        serial=false
-        [ "$cmdTotalTracks" ] || totalTracks=1
-        fillValues
-        doDownload
-    done
+  for URL in "${URLs[@]}"; do
+    items=''
+    description=''
+    title=''
+    album=''
+    creator=''
+    serial=false
+    [ -n "$cmdTotalTracks" ] || totalTracks=1
+    if fillValues "$URL"; then
+      doDownload
+    fi
+  done
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
